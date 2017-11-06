@@ -33,6 +33,8 @@ python src/train.py
 # Test
 To test your model on some images, go to src/test.py, set the path to your model, save and from the terminal do:
 python src/test.py
+you can download an example of weights for this dataset from:
+https://goo.gl/kcmgHM 
 
 
 (o) A.I. Mons team, www.ai-mons.com
