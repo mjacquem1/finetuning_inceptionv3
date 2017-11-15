@@ -47,4 +47,4 @@ def testing(weights_path="weights/weights.h5"):
 
 
 if __name__ == "__main__":
-	testing(weights_path="weights/inceptionv3_catsdogs_weights_10epochs.h5")
+	testing() #weights_path="weights/inceptionv3_catsdogs_weights_10epochs.h5")

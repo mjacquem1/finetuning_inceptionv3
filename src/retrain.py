@@ -15,10 +15,10 @@ import matplotlib.pyplot as plt
 module_path = os.path.dirname(os.path.abspath(__file__))
 
 IM_WIDTH, IM_HEIGHT = 299, 299  # fixed size for InceptionV3
-NB_EPOCHS = 25
+NB_EPOCHS = 40
 BAT_SIZE = 32
 FC_SIZE = 1024
-NB_IV3_LAYERS_TO_FREEZE = 172
+NB_IV3_LAYERS_TO_FREEZE = 100 # 150 # 172
 
 
 # The functions adds a new fully connected layer at the top of base_model. The output of this FC layer has
@@ -45,7 +45,7 @@ def setup_to_transfer_learn(model, base_model):
 	"""Freeze all layers and compile the model"""
 	for layer in base_model.layers:
 		layer.trainable = False
-	model.compile(optimizer=RMSprop(lr=0.0003),
+	model.compile(optimizer=RMSprop(lr=0.0001),
 				  loss='categorical_crossentropy',
 				  metrics=['accuracy'])
 
@@ -64,7 +64,7 @@ def setup_to_finetune(model):
 		layer.trainable = False
 	for layer in model.layers[NB_IV3_LAYERS_TO_FREEZE:]:
 		layer.trainable = True
-	model.compile(optimizer=SGD(lr=0.001, momentum=0.9),
+	model.compile(optimizer=SGD(lr=0.0003, momentum=0.9),
 				  loss='categorical_crossentropy',
 				  metrics=['accuracy'])
 
@@ -134,27 +134,30 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
 	if verbose: print("transfer learning...")
 	setup_to_transfer_learn(model, base_model)
 
+	# continue training with the saved weights from the previous training phase
+	model.load_weights("weights/weights.h5")
+	
 	'''
 	ModelCheckPoint saves the model weights after each epoch if the validation loss decreased
 	'''
-	checkpointer = ModelCheckpoint(filepath=os.path.join(module_path, '../weights/weights_tl_tmp.h5'), verbose=0,
+	checkpointer = ModelCheckpoint(filepath=os.path.join(module_path, '../weights/weights_tl_tmp_r.h5'), verbose=0,
 								   save_best_only=True)
 
 	# Train our model using transfer learning
-	model.fit_generator(
-		train_generator,
-		steps_per_epoch=nb_train_samples / batch_size,
-		epochs=nb_epoch,
-		callbacks=[checkpointer],
-		validation_data=validation_generator,
-		validation_steps=nb_val_samples / batch_size,
-		class_weight='auto'
-	)
+#	model.fit_generator(
+#		train_generator,
+#		steps_per_epoch=nb_train_samples / batch_size,
+#		epochs=nb_epoch,
+#		callbacks=[checkpointer],
+#		validation_data=validation_generator,
+#		validation_steps=nb_val_samples / batch_size,
+#		class_weight='auto'
+#	)
 
 	# fine-tuning
 	if verbose: print("fine-tuning...")
 	setup_to_finetune(model)
-	checkpointer = ModelCheckpoint(filepath=os.path.join(module_path, '../weights/weights_ft_tmp.h5'), verbose=0,
+	checkpointer = ModelCheckpoint(filepath=os.path.join(module_path, '../weights/weights_ft_tmp_r.h5'), verbose=0,
 								   save_best_only=True)
 	# Train our model using fine-tuning
 	model.fit_generator(
@@ -172,7 +175,7 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
 	model.save(output_model_file)
 
 
-def training(path_to_dataset, output_model_file="weights/weights.h5", nb_epoch=NB_EPOCHS, batch_size=BAT_SIZE):
+def training(path_to_dataset, output_model_file="weights/weights_r.h5", nb_epoch=NB_EPOCHS, batch_size=BAT_SIZE):
 	train_dir = path_to_dataset + "/train"
 	val_dir = path_to_dataset + "/valid"
 
