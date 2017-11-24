@@ -1,6 +1,7 @@
 from keras.models import Model
 from keras.layers import Dense, GlobalAveragePooling2D
-from keras.preprocessing.image import ImageDataGenerator
+# from keras.preprocessing.image import ImageDataGenerator
+from MyImageDataGenerator import *
 from keras.optimizers import SGD, RMSprop, Adagrad
 from keras.callbacks import ModelCheckpoint
 
@@ -37,6 +38,22 @@ def add_new_last_layer(base_model, nb_classes):
 	predictions = Dense(nb_classes, activation='softmax')(x)
 	model = Model(inputs=base_model.input, outputs=predictions)
 	return model
+
+def add_new_last_layer_2_labels(base_model, nb_classes1, nb_classes2):
+    """Add last layer to the convnet
+    Args:
+    base_model: keras model excluding top
+    nb_classes: # of classes
+    Returns:
+    new keras model with last layer
+    """
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)
+    x = Dense(FC_SIZE, activation='relu')(x)
+    predictions1 = Dense(nb_classes1, activation='softmax')(x)
+    predictions2 = Dense(nb_classes2, activation='softmax')(x)
+    model = Model(inputs=base_model.input, outputs=[predictions1, predictions2])
+    return model
 
 
 # We use this function to setup the transfer learning. The transfer learning means that we freezes the weights of
@@ -80,11 +97,24 @@ def get_nb_files(directory):
 	return cnt
 
 
+def get_nb_jpgs(directory):
+    """Get number of files by searching directory recursively"""
+    if not os.path.exists(directory):
+        return 0
+    cnt = 0
+    for r, dirs, files in os.walk(directory):
+        for dr in dirs:
+            cnt += len(glob.glob(os.path.join(r, dr + "/*.jpg")))
+    return cnt
+
+
 def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=True):
 	"""Use transfer learning and fine-tuning to train a network on a new dataset"""
-	nb_train_samples = get_nb_files(train_dir)
-	nb_classes = len(glob.glob(train_dir + "/*"))
-	nb_val_samples = get_nb_files(val_dir)
+	nb_train_samples = get_nb_jpgs(train_dir)
+#   nb_classes = len(glob.glob(train_dir + "/*"))
+	nb_classes1 = 3
+	nb_classes2 = 8
+	nb_val_samples = get_nb_jpgs(val_dir)
 	nb_epoch = NB_EPOCHS if not nb_epoch else int(nb_epoch)
 	batch_size = BAT_SIZE if not batch_size else batch_size
 
@@ -93,54 +123,54 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
 	# We prepare our data using data augmentation
 	# Here, we apply multiple transformation to have a bigger dataset for training
 	# for example we add zooms, flips, shifts
-	train_datagen = ImageDataGenerator(
-		preprocessing_function=preprocess_input,
-		width_shift_range=0.4,
-		shear_range=0.4,
-		zoom_range=0.4,
-		horizontal_flip=True,
-		vertical_flip=True
-	)
+	train_datagen = MyImageDataGenerator(
+        preprocessing_function=preprocess_input,
+        width_shift_range=0.4,
+        shear_range=0.4,
+        zoom_range=0.4,
+        horizontal_flip=True,
+        vertical_flip=True
+    )
 
-	# we do the same transformation for the validation dataset
-	valid_datagen = ImageDataGenerator(
-		preprocessing_function=preprocess_input,
-		width_shift_range=0.4,
-		shear_range=0.4,
-		zoom_range=0.4,
-		horizontal_flip=True,
-		vertical_flip=True
-	)
+    # we do the same transformation for the validation dataset
+	valid_datagen = MyImageDataGenerator(
+        preprocessing_function=preprocess_input,
+        width_shift_range=0.4,
+        shear_range=0.4,
+        zoom_range=0.4,
+        horizontal_flip=True,
+        vertical_flip=True
+    )
 
-	# We generate now data from train_dir using the defined transformations
-	train_generator = train_datagen.flow_from_directory(
-		train_dir,
-		target_size=(IM_WIDTH, IM_HEIGHT),
-		batch_size=batch_size
-	)
-	# We generate data from valid_dir using the defined transformations
-	validation_generator = valid_datagen.flow_from_directory(
-		val_dir,
-		target_size=(IM_WIDTH, IM_HEIGHT),
-		batch_size=batch_size
-	)
+    # We generate now data from train_dir using the defined transformations
+	train_generator = train_datagen.flow_from_directory_multilabel(
+        train_dir,
+        target_size=(IM_WIDTH, IM_HEIGHT),
+        batch_size=batch_size
+    )
+    # We generate data from valid_dir using the defined transformations
+	validation_generator = valid_datagen.flow_from_directory_multilabel(
+        val_dir,
+        target_size=(IM_WIDTH, IM_HEIGHT),
+        batch_size=batch_size
+    )
 
 	# setup model
 	if verbose: print("setup model...")
 	base_model = InceptionV3(weights='imagenet', include_top=False)  # include_top=False => excludes final FC layer
-	model = add_new_last_layer(base_model, nb_classes)
+	model = add_new_last_layer_2_labels(base_model, nb_classes1, nb_classes2)
 
 	# transfer learning
 	if verbose: print("transfer learning...")
 	setup_to_transfer_learn(model, base_model)
 
 	# continue training with the saved weights from the previous training phase
-	model.load_weights("weights/weights.h5")
+	model.load_weights("weights/weights_2l.h5")
 	
 	'''
 	ModelCheckPoint saves the model weights after each epoch if the validation loss decreased
 	'''
-	checkpointer = ModelCheckpoint(filepath=os.path.join(module_path, '../weights/weights_tl_tmp_r.h5'), verbose=0,
+	checkpointer = ModelCheckpoint(filepath=os.path.join(module_path, '../weights/weights_2l_tl_tmp_r.h5'), verbose=0,
 								   save_best_only=True)
 
 	# Train our model using transfer learning
@@ -157,25 +187,25 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
 	# fine-tuning
 	if verbose: print("fine-tuning...")
 	setup_to_finetune(model)
-	checkpointer = ModelCheckpoint(filepath=os.path.join(module_path, '../weights/weights_ft_tmp_r.h5'), verbose=0,
+	checkpointer = ModelCheckpoint(filepath=os.path.join(module_path, '../weights/weights_2l_ft_tmp_r.h5'), verbose=0,
 								   save_best_only=True)
 	# Train our model using fine-tuning
 	model.fit_generator(
-		train_generator,
-		steps_per_epoch=nb_train_samples / batch_size,
-		epochs=nb_epoch,
-		callbacks=[checkpointer],
-		validation_data=validation_generator,
-		validation_steps=nb_val_samples / batch_size,
-		class_weight='auto'
-	)
+        train_generator,
+        steps_per_epoch=nb_train_samples / batch_size,
+        epochs=nb_epoch,
+        callbacks=[checkpointer],
+        validation_data=validation_generator,
+        validation_steps=nb_val_samples / batch_size,
+        class_weight=['auto', 'auto']
+    )
 
 	# Saving the model
 	if verbose: print("Saving model...")
 	model.save(output_model_file)
 
 
-def training(path_to_dataset, output_model_file="weights/weights_r.h5", nb_epoch=NB_EPOCHS, batch_size=BAT_SIZE):
+def training(path_to_dataset, output_model_file="weights/weights_2l_r.h5", nb_epoch=NB_EPOCHS, batch_size=BAT_SIZE):
 	train_dir = path_to_dataset + "/train"
 	val_dir = path_to_dataset + "/valid"
 
@@ -200,4 +230,4 @@ def training(path_to_dataset, output_model_file="weights/weights_r.h5", nb_epoch
 if __name__ == "__main__":
 #	training("data/cats-dogs")
 #	training("../imdb_crop/data")
-	training("../openu/data")
+	training("../openu/data2")
