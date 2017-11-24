@@ -20,7 +20,7 @@ try:
 except ImportError:
     pil_image = None
 
-from keras.preprocessing.image import ImageDataGenerator
+from keras.preprocessing.image import * # ImageDataGenerator
 from itertools import chain
 
 class MyImageDataGenerator(ImageDataGenerator):
@@ -47,7 +47,7 @@ class MyImageDataGenerator(ImageDataGenerator):
                  rescale=None,
                  preprocessing_function=None,
                  data_format=None):
-        super(ImageDataGenerator, self).__init__(featurewise_center,
+        super(MyImageDataGenerator, self).__init__(featurewise_center,
                                                  samplewise_center,
                                                  featurewise_std_normalization,
                                                  samplewise_std_normalization,
@@ -111,7 +111,7 @@ def _count_valid_files_in_directory(directory, white_list_formats, follow_links)
                 samples += 1
     return samples
 
-def _list_valid_filenames_in_directory_multilabel(directory, white_list_formats,
+def _list_valid_filenames_in_directory_multilabel(directory, subdir, white_list_formats,
                                                   class_indices, follow_links):
     """List paths of files in `subdir` relative from `directory` whose extensions are in `white_list_formats`.
     # Arguments
@@ -130,15 +130,14 @@ def _list_valid_filenames_in_directory_multilabel(directory, white_list_formats,
         return sorted(os.walk(subpath, followlinks=follow_links), key=lambda tpl: tpl[0])
 
     def _mysplit(p):
-	if '/' in p:
-	    b, d = os.path.split(p)
-	    return mysplit(b) + [d]
-	return [p]
+        if '/' in p or '\\' in p:
+            b, d = os.path.split(p)
+            return _mysplit(b) + [d]
+        return [p]
     classes = []
     filenames = []
-    subdir = os.path.basename(directory)
-    basedir = os.path.dirname(directory)
-    for root, _, files in _recursive_list(directory):
+    class_idx = [class_indices[sd] for sd in _mysplit(subdir)]
+    for root, _, files in _recursive_list(os.path.join(directory, subdir)):
         for fname in sorted(files):
             is_valid = False
             for extension in white_list_formats:
@@ -146,10 +145,10 @@ def _list_valid_filenames_in_directory_multilabel(directory, white_list_formats,
                     is_valid = True
                     break
             if is_valid:
-                classes.append([class_indices[sd] for sd in _mysplit(subdir)])
+                classes.append(class_idx)
                 # add filename relative to directory
-                absolute_path = os.path.join(root, fname)
-                filenames.append(os.path.relpath(absolute_path, basedir))
+                absolute_path = os.path.join(directory, subdir, fname)
+                filenames.append(absolute_path)
     return classes, filenames
 
 class DirectoryIterator_multilabel(Iterator):
@@ -242,10 +241,12 @@ class DirectoryIterator_multilabel(Iterator):
                     for sd2 in sorted(os.listdir(c1dir)):
                         if os.path.isdir(os.path.join(c1dir, sd2)):
                             c2.add(sd2)
-                            all_subdirs = os.path.join(subdir, sd2)
-            classes = [c1, c2]
+                            all_subdirs.append(os.path.join(subdir, sd2))
+            classes = [list(c1), list(c2)]
         self.num_classes = [len(c) for c in classes]
-        self.class_indices = dict(zip(chain(classes), sum(self.num_classes)))
+        self.class_indices = dict(zip(chain(*classes), chain(*(range(nc) for nc in self.num_classes))))
+        print(self.class_indices)
+        print(all_subdirs)
 
         pool = multiprocessing.pool.ThreadPool()
         function_partial = partial(_count_valid_files_in_directory,
@@ -263,26 +264,35 @@ class DirectoryIterator_multilabel(Iterator):
         self.filenames = []
         self.classes = np.zeros((self.samples, len(classes)), dtype='int32')
         i = 0
-        for dirpath in (os.path.join(directory, subdir) for subdir in all_subdirs):
+        for subdir in all_subdirs:
             results.append(pool.apply_async(_list_valid_filenames_in_directory_multilabel,
-                                            (dirpath, white_list_formats,
+                                            (directory, subdir, white_list_formats,
                                              self.class_indices, follow_links)))
         for res in results:
             classes, filenames = res.get()
-            self.classes[i:i + len(classes)] = classes
+            self.classes[i:i + len(classes),:] = classes
             self.filenames += filenames
             i += len(classes)
         pool.close()
         pool.join()
+        print(self.filenames[:10])
+        print(self.classes[:10])
         super(DirectoryIterator_multilabel, self).__init__(self.samples, batch_size, shuffle, seed)
 
     def _get_batches_of_transformed_samples(self, index_array):
+        # for some reason, index_array is a 3-tuple (array, 0, 32)
+        # where is that problem coming from ???
+        index_array = index_array[0]
         batch_x = np.zeros((len(index_array),) + self.image_shape, dtype=K.floatx())
         grayscale = self.color_mode == 'grayscale'
         # build batch of image data
         for i, j in enumerate(index_array):
-            fname = self.filenames[j]
-            img = load_img(os.path.join(self.directory, fname),
+            try:
+                fname = self.filenames[j]
+            except:
+                print(j)
+                print(index_array)
+            img = load_img(fname,
                            grayscale=grayscale,
                            target_size=self.target_size)
             x = img_to_array(img, data_format=self.data_format)
@@ -306,10 +316,10 @@ class DirectoryIterator_multilabel(Iterator):
         elif self.class_mode == 'binary':
             batch_y = self.classes[index_array].astype(K.floatx())
         elif self.class_mode == 'categorical':
-            batch_y = np.zeros((len(batch_x), sum(self.num_classes)), dtype=K.floatx())
-            for i, labels in enumerate(self.classes[index_array]):
-                for label in labels:
-                    batch_y[i, label] = 1.
+            batch_y = [np.zeros((len(batch_x), self.num_classes[c]), dtype=K.floatx()) for c in range(len(self.num_classes))]
+            for c in range(len(self.num_classes)):
+                for i, label in enumerate(self.classes[index_array, c]):
+                    batch_y[c][i,label] = 1.
         else:
             return batch_x
         return batch_x, batch_y
@@ -323,4 +333,4 @@ class DirectoryIterator_multilabel(Iterator):
             index_array = next(self.index_generator)
         # The transformation of images is not under thread lock
         # so it can be done in parallel
-return self._get_batches_of_transformed_samples(index_array)
+        return self._get_batches_of_transformed_samples(index_array)
