@@ -5,8 +5,9 @@ from MyImageDataGenerator import *
 from keras.optimizers import SGD, RMSprop, Adagrad
 from keras.callbacks import ModelCheckpoint
 
-from inception_v3 import InceptionV3
-from inception_v3 import preprocess_input
+#from inception_v3 import InceptionV3
+#from inception_v3 import preprocess_input
+from inception_resnet_v2 import InceptionResNetV2, preprocess_input
 
 import os
 import sys
@@ -19,7 +20,8 @@ IM_WIDTH, IM_HEIGHT = 299, 299  # fixed size for InceptionV3
 NB_EPOCHS = 25
 BAT_SIZE = 32
 FC_SIZE = 1024
-NB_IV3_LAYERS_TO_FREEZE = 172
+# NB_IV3_LAYERS_TO_FREEZE = 172
+NB_RIV2_LAYERS_TO_FREEZE = 700
 
 
 # The functions adds a new fully connected layer at the top of base_model. The output of this FC layer has
@@ -59,6 +61,7 @@ def add_new_last_layer_2_labels(base_model, nb_classes1, nb_classes2):
 # We use this function to setup the transfer learning. The transfer learning means that we freezes the weights of
 # the base_model, and we train only the last FC layer that we have added using add_new_last_layer function
 def setup_to_transfer_learn(model, base_model):
+    print("Nb layers: ", len(model.layers))
     """Freeze all layers and compile the model"""
     for layer in base_model.layers:
         layer.trainable = False
@@ -77,9 +80,9 @@ def setup_to_finetune(model):
     Args:
      model: keras model
     """
-    for layer in model.layers[:NB_IV3_LAYERS_TO_FREEZE]:
+    for layer in model.layers[:NB_RIV2_LAYERS_TO_FREEZE]:
         layer.trainable = False
-    for layer in model.layers[NB_IV3_LAYERS_TO_FREEZE:]:
+    for layer in model.layers[NB_RIV2_LAYERS_TO_FREEZE:]:
         layer.trainable = True
     model.compile(optimizer=SGD(lr=0.001, momentum=0.9),
                   loss='categorical_crossentropy',
@@ -157,7 +160,8 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
 
     # setup model
     if verbose: print("setup model...")
-    base_model = InceptionV3(weights='imagenet', include_top=False)  # include_top=False => excludes final FC layer
+#    base_model = InceptionV3(weights='imagenet', include_top=False)  # include_top=False => excludes final FC layer
+    base_model = InceptionResNetV2(weights='imagenet', include_top=False)  # include_top=False => excludes final FC layer
     model = add_new_last_layer_2_labels(base_model, nb_classes1, nb_classes2)
 
     # transfer learning
@@ -171,15 +175,15 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
                                    save_best_only=True)
 
     # Train our model using transfer learning
-    model.fit_generator(
-        train_generator,
-        steps_per_epoch=nb_train_samples / batch_size,
-        epochs=nb_epoch,
-        callbacks=[checkpointer],
-        validation_data=validation_generator,
-        validation_steps=nb_val_samples / batch_size,
-        class_weight=['auto', 'auto']
-    )
+##    model.fit_generator(
+##        train_generator,
+##        steps_per_epoch=nb_train_samples / batch_size,
+##        epochs=nb_epoch,
+##        callbacks=[checkpointer],
+##        validation_data=validation_generator,
+##        validation_steps=nb_val_samples / batch_size,
+##        class_weight=['auto', 'auto']
+##    )
 
     # fine-tuning
     if verbose: print("fine-tuning...")
