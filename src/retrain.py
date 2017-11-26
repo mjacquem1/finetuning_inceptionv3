@@ -5,8 +5,9 @@ from MyImageDataGenerator import *
 from keras.optimizers import SGD, RMSprop, Adagrad
 from keras.callbacks import ModelCheckpoint
 
-from inception_v3 import InceptionV3
-from inception_v3 import preprocess_input
+#from inception_v3 import InceptionV3
+#from inception_v3 import preprocess_input
+from inception_resnet_v2 import InceptionResNetV2, preprocess_input
 
 import os
 import sys
@@ -19,7 +20,8 @@ IM_WIDTH, IM_HEIGHT = 299, 299  # fixed size for InceptionV3
 NB_EPOCHS = 40
 BAT_SIZE = 32
 FC_SIZE = 1024
-NB_IV3_LAYERS_TO_FREEZE = 100 # 150 # 172
+# NB_IV3_LAYERS_TO_FREEZE = 100 # 150 # 172
+NB_RIV2_LAYERS_TO_FREEZE = 500
 
 
 # The functions adds a new fully connected layer at the top of base_model. The output of this FC layer has
@@ -77,9 +79,9 @@ def setup_to_finetune(model):
 	Args:
 	 model: keras model
 	"""
-	for layer in model.layers[:NB_IV3_LAYERS_TO_FREEZE]:
+	for layer in model.layers[:NB_RIV2_LAYERS_TO_FREEZE]:
 		layer.trainable = False
-	for layer in model.layers[NB_IV3_LAYERS_TO_FREEZE:]:
+	for layer in model.layers[NB_RIV2_LAYERS_TO_FREEZE:]:
 		layer.trainable = True
 	model.compile(optimizer=SGD(lr=0.0003, momentum=0.9),
 				  loss='categorical_crossentropy',
@@ -157,7 +159,7 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
 
 	# setup model
 	if verbose: print("setup model...")
-	base_model = InceptionV3(weights='imagenet', include_top=False)  # include_top=False => excludes final FC layer
+	base_model = InceptionResNetV2(weights='imagenet', include_top=False)  # include_top=False => excludes final FC layer
 	model = add_new_last_layer_2_labels(base_model, nb_classes1, nb_classes2)
 
 	# transfer learning
@@ -165,12 +167,12 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
 	setup_to_transfer_learn(model, base_model)
 
 	# continue training with the saved weights from the previous training phase
-	model.load_weights("weights/weights_2l.h5")
+	model.load_weights("weights/weights_ir.h5")
 	
 	'''
 	ModelCheckPoint saves the model weights after each epoch if the validation loss decreased
 	'''
-	checkpointer = ModelCheckpoint(filepath=os.path.join(module_path, '../weights/weights_2l_tl_tmp_r.h5'), verbose=0,
+	checkpointer = ModelCheckpoint(filepath=os.path.join(module_path, '../weights/weights_ir_tl_tmp_r.h5'), verbose=0,
 								   save_best_only=True)
 
 	# Train our model using transfer learning
@@ -187,7 +189,7 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
 	# fine-tuning
 	if verbose: print("fine-tuning...")
 	setup_to_finetune(model)
-	checkpointer = ModelCheckpoint(filepath=os.path.join(module_path, '../weights/weights_2l_ft_tmp_r.h5'), verbose=0,
+	checkpointer = ModelCheckpoint(filepath=os.path.join(module_path, '../weights/weights_ir_ft_tmp_r.h5'), verbose=0,
 								   save_best_only=True)
 	# Train our model using fine-tuning
 	model.fit_generator(
@@ -205,7 +207,7 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
 	model.save(output_model_file)
 
 
-def training(path_to_dataset, output_model_file="weights/weights_2l_r.h5", nb_epoch=NB_EPOCHS, batch_size=BAT_SIZE):
+def training(path_to_dataset, output_model_file="weights/weights_ir_r.h5", nb_epoch=NB_EPOCHS, batch_size=BAT_SIZE):
 	train_dir = path_to_dataset + "/train"
 	val_dir = path_to_dataset + "/valid"
 
