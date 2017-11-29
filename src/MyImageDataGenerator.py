@@ -244,7 +244,9 @@ class DirectoryIterator_multilabel(Iterator):
                             all_subdirs.append(os.path.join(subdir, sd2))
             classes = [list(c1), list(c2)]
         self.num_classes = [len(c) for c in classes]
-        self.class_indices = dict(zip(chain(*classes), chain(*(range(nc) for nc in self.num_classes))))
+        # self.class_indices = dict(zip(chain(*classes), chain(*(range(nc) for nc in self.num_classes))))
+        self.class_indices = {'0-2': 0, '4-6': 1, '8-12': 2, '15-20': 3, '25-32': 4, '38-43': 5, '48-53': 6, '60-100': 7,
+                              'm': 0, 'f': 1, 'u': 2}
         print(self.class_indices)
         print(all_subdirs)
 
