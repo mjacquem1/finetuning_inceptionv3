@@ -61,6 +61,25 @@ def add_new_last_layer_2_labels(base_model, nb_classes1, nb_classes2):
     return model
 
 
+def add_two_last_layers_2_labels(base_model, nb_classes1, nb_classes2):
+    """Add two last layers to the convnet
+    Args:
+    base_model: keras model excluding top
+    nb_classes: # of classes
+    Returns:
+    new keras model with last layers
+    """
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)
+    x = Dense(FC_SIZE, activation='relu')(x)
+    dense1 = Dense(32, activation='relu')(x)
+    predictions1 = Dense(nb_classes1, activation='softmax')(dense1)
+    dense2 = Dense(32, activation='relu')(x)
+    predictions2 = Dense(nb_classes2, activation='softmax')(dense2)
+    model = Model(inputs=base_model.input, outputs=[predictions1, predictions2])
+    return model
+
+
 # We use this function to setup the transfer learning. The transfer learning means that we freezes the weights of
 # the base_model, and we train only the last FC layer that we have added using add_new_last_layer function
 def setup_to_transfer_learn(model, base_model):
@@ -147,28 +166,28 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
     # Here, we apply multiple transformation to have a bigger dataset for training
     # for example we add zooms, flips, shifts
     train_datagen = MyImageDataGenerator(
-#        preprocessing_function=preprocess_input,
-        samplewise_center=True,
-        samplewise_std_normalization=True,
-        rotation_range=45,
+        preprocessing_function=preprocess_input,
+#        samplewise_center=True,
+#        samplewise_std_normalization=True,
+        rotation_range=20,
         width_shift_range=0.4,
         shear_range=0.4,
         zoom_range=0.4,
-        fill_mode='nearest',
+#        fill_mode='nearest',
         horizontal_flip=True,
         vertical_flip=False
     )
 
     # we do the same transformation for the validation dataset
     valid_datagen = MyImageDataGenerator(
-#        preprocessing_function=preprocess_input,
-        samplewise_center=True,
-        samplewise_std_normalization=True,
-        rotation_range=45,
+        preprocessing_function=preprocess_input,
+#        samplewise_center=True,
+#        samplewise_std_normalization=True,
+        rotation_range=20,
         width_shift_range=0.4,
         shear_range=0.4,
         zoom_range=0.4,
-        fill_mode='nearest',
+#        fill_mode='nearest',
         horizontal_flip=True,
         vertical_flip=False
     )
@@ -190,7 +209,7 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
     if verbose: print("setup model...")
     base_model = InceptionV3(weights='imagenet', include_top=False)  # include_top=False => excludes final FC layer
 #    base_model = InceptionResNetV2(weights='imagenet', include_top=False)  # include_top=False => excludes final FC layer
-    model = add_new_last_layer_2_labels(base_model, nb_classes1, nb_classes2)
+    model = add_two_last_layers_2_labels(base_model, nb_classes1, nb_classes2)
 
     # transfer learning
     if verbose: print("transfer learning...")

@@ -19,11 +19,11 @@ module_path = os.path.dirname(os.path.abspath(__file__))
 IM_WIDTH, IM_HEIGHT = 299, 299  # fixed size for InceptionV3
 NB_EPOCHS_TL = 2
 NB_EPOCHS_FT = 5
-NB_EPOCHS_FT2 = 15
+NB_EPOCHS_FT2 = 5
 BAT_SIZE = 32
 FC_SIZE = 1024
 NB_IV3_LAYERS_TO_FREEZE_FT = 172
-NB_IV3_LAYERS_TO_FREEZE_FT2 = 100
+NB_IV3_LAYERS_TO_FREEZE_FT2 = 80 # 100
 # NB_RIV2_LAYERS_TO_FREEZE_FT = 700
 
 
@@ -57,6 +57,25 @@ def add_new_last_layer_2_labels(base_model, nb_classes1, nb_classes2):
     x = Dense(FC_SIZE, activation='relu')(x)
     predictions1 = Dense(nb_classes1, activation='softmax')(x)
     predictions2 = Dense(nb_classes2, activation='softmax')(x)
+    model = Model(inputs=base_model.input, outputs=[predictions1, predictions2])
+    return model
+
+
+def add_two_last_layers_2_labels(base_model, nb_classes1, nb_classes2):
+    """Add two last layers to the convnet
+    Args:
+    base_model: keras model excluding top
+    nb_classes: # of classes
+    Returns:
+    new keras model with last layers
+    """
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)
+    x = Dense(FC_SIZE, activation='relu')(x)
+    dense1 = Dense(32, activation='relu')(x)
+    predictions1 = Dense(nb_classes1, activation='softmax')(dense1)
+    dense2 = Dense(32, activation='relu')(x)
+    predictions2 = Dense(nb_classes2, activation='softmax')(dense2)
     model = Model(inputs=base_model.input, outputs=[predictions1, predictions2])
     return model
 
@@ -104,7 +123,7 @@ def setup_to_finetune2(model):
 		layer.trainable = False
 	for layer in model.layers[NB_IV3_LAYERS_TO_FREEZE_FT2:]:
 		layer.trainable = True
-	model.compile(optimizer=SGD(lr=0.00001, momentum=0.9),
+	model.compile(optimizer=SGD(lr=0.00003, momentum=0.9),
 				  loss='categorical_crossentropy',
 				  metrics=['accuracy'])
 
@@ -147,28 +166,28 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
     # Here, we apply multiple transformation to have a bigger dataset for training
     # for example we add zooms, flips, shifts
     train_datagen = MyImageDataGenerator(
-#        preprocessing_function=preprocess_input,
-        samplewise_center=True,
-        samplewise_std_normalization=True,
-        rotation_range=45,
+        preprocessing_function=preprocess_input,
+#        samplewise_center=True,
+#        samplewise_std_normalization=True,
+        rotation_range=20,
         width_shift_range=0.4,
         shear_range=0.4,
         zoom_range=0.4,
-        fill_mode='nearest',
+#        fill_mode='nearest',
         horizontal_flip=True,
         vertical_flip=False
     )
 
     # we do the same transformation for the validation dataset
     valid_datagen = MyImageDataGenerator(
-#        preprocessing_function=preprocess_input,
-        samplewise_center=True,
-        samplewise_std_normalization=True,
-        rotation_range=45,
+        preprocessing_function=preprocess_input,
+#        samplewise_center=True,
+#        samplewise_std_normalization=True,
+        rotation_range=20,
         width_shift_range=0.4,
         shear_range=0.4,
         zoom_range=0.4,
-        fill_mode='nearest',
+#        fill_mode='nearest',
         horizontal_flip=True,
         vertical_flip=False
     )
@@ -190,10 +209,10 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
     if verbose: print("setup model...")
     base_model = InceptionV3(weights='imagenet', include_top=False)  # include_top=False => excludes final FC layer
 #    base_model = InceptionResNetV2(weights='imagenet', include_top=False)  # include_top=False => excludes final FC layer
-    model = add_new_last_layer_2_labels(base_model, nb_classes1, nb_classes2)
+    model = add_two_last_layers_2_labels(base_model, nb_classes1, nb_classes2)
 
     # continue training with the saved weights from the previous training phase
-    model.load_weights("weights/weights_full.h5")
+    model.load_weights("weights/weights_2dense_full.h5")
 
 
     # fine-tuning 2 
