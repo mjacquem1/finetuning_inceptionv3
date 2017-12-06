@@ -147,22 +147,30 @@ def train(train_dir, val_dir, output_model_file, nb_epoch, batch_size, verbose=T
     # Here, we apply multiple transformation to have a bigger dataset for training
     # for example we add zooms, flips, shifts
     train_datagen = MyImageDataGenerator(
-        preprocessing_function=preprocess_input,
+#        preprocessing_function=preprocess_input,
+        samplewise_center=True,
+        samplewise_std_normalization=True,
+        rotation_range=45,
         width_shift_range=0.4,
         shear_range=0.4,
         zoom_range=0.4,
+        fill_mode='nearest',
         horizontal_flip=True,
-        vertical_flip=True
+        vertical_flip=False
     )
 
     # we do the same transformation for the validation dataset
     valid_datagen = MyImageDataGenerator(
-        preprocessing_function=preprocess_input,
+#        preprocessing_function=preprocess_input,
+        samplewise_center=True,
+        samplewise_std_normalization=True,
+        rotation_range=45,
         width_shift_range=0.4,
         shear_range=0.4,
         zoom_range=0.4,
+        fill_mode='nearest',
         horizontal_flip=True,
-        vertical_flip=True
+        vertical_flip=False
     )
 
     # We generate now data from train_dir using the defined transformations
