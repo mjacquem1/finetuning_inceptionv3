@@ -245,10 +245,9 @@ class DirectoryIterator_multilabel(Iterator):
             classes = [list(c1), list(c2)]
         self.num_classes = [len(c) for c in classes]
         # self.class_indices = dict(zip(chain(*classes), chain(*(range(nc) for nc in self.num_classes))))
+        # for the moment, hardcode the class indices, to get them ordered "naturally"
         self.class_indices = {'0-2': 0, '4-6': 1, '8-12': 2, '15-20': 3, '25-32': 4, '38-43': 5, '48-53': 6, '60-100': 7,
                               'm': 0, 'f': 1, 'u': 2}
-        print(self.class_indices)
-        print(all_subdirs)
 
         pool = multiprocessing.pool.ThreadPool()
         function_partial = partial(_count_valid_files_in_directory,
@@ -277,8 +276,6 @@ class DirectoryIterator_multilabel(Iterator):
             i += len(classes)
         pool.close()
         pool.join()
-        print(self.filenames[:10])
-        print(self.classes[:10])
         super(DirectoryIterator_multilabel, self).__init__(self.samples, batch_size, shuffle, seed)
 
     def _get_batches_of_transformed_samples(self, index_array):
